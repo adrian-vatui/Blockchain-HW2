@@ -3,6 +3,7 @@
 pragma solidity >=0.8.2 <0.9.0;
 
 import "./Owned.sol";
+import "./SampleToken.sol";
 
 contract ProductIdentification is Owned {
     struct Product {
@@ -13,6 +14,7 @@ contract ProductIdentification is Owned {
     }
 
     uint private registrationTax;
+    SampleToken public tokenContract;
 
     // Producer => bool
     mapping(address => bool) private producers;
@@ -20,6 +22,11 @@ contract ProductIdentification is Owned {
     mapping(uint => Product) products;
     // Product => last index for id
     uint currentProductIndex = 0;
+
+    constructor(SampleToken _tokenContract, uint _registrationTax) {
+        tokenContract = _tokenContract;
+        registrationTax = _registrationTax;
+    }
 
     function setRegistrationTax(uint newRegistrationTax) external onlyOwner {
         registrationTax = newRegistrationTax;
@@ -32,12 +39,9 @@ contract ProductIdentification is Owned {
     // PRODUCERS
 
     function registerProducer() external payable {
-        require(msg.value >= registrationTax, "Not enough credits.");
+        require(tokenContract.transferFrom(msg.sender, address(this), registrationTax));
 
         producers[msg.sender] = true;
-
-        payable(msg.sender).transfer(msg.value - registrationTax);
-        payable(owner).transfer(registrationTax);
     }
 
     function isProducerRegistered(address producerAddress) external view returns (bool) {
@@ -66,5 +70,10 @@ contract ProductIdentification is Owned {
         require(products[productId].producer != address(0), "Product does not exist");
 
         return products[productId];
+    }
+
+    function collectTokens() external onlyOwner {
+        require(tokenContract.transfer(owner, tokenContract.balanceOf(address(this))));
+        payable(msg.sender).transfer(address(this).balance);
     }
 }
