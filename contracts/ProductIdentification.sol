@@ -38,7 +38,7 @@ contract ProductIdentification is Owned {
 
     // PRODUCERS
 
-    function registerProducer() external payable {
+    function registerProducer() external {
         require(tokenContract.transferFrom(msg.sender, address(this), registrationTax));
 
         producers[msg.sender] = true;
