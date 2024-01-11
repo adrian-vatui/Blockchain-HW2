@@ -104,6 +104,7 @@ contract MyAuction is Auction {
     
     function withdraw() public override returns (bool) {
         require(block.timestamp > auction_end || STATE == auction_state.CANCELLED, "You can't withdraw, the auction is still open");
+        require(block.timestamp > auction_end && STATE != auction_state.CANCELLED && msg.sender != highestBidder, "Winner can't withdraw their funds!");
         
         uint amount;
         amount = bids[msg.sender];
