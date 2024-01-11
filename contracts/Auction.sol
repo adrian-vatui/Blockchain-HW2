@@ -2,6 +2,9 @@
 
 pragma solidity ^0.8.0;
 
+import "./SampleToken.sol";
+import "./ProductIdentification.sol";
+
 contract Auction {
     
     address payable internal auction_owner;
@@ -9,7 +12,7 @@ contract Auction {
     uint256 public auction_end;
     uint256 public highestBid;
     address public highestBidder;
- 
+
 
     enum auction_state{
         CANCELLED,STARTED
@@ -38,7 +41,7 @@ contract Auction {
         _;
     }
     
-    function bid() public virtual payable returns (bool) {}
+    function bid(uint bidTokens) public virtual returns (bool) {}
     function withdraw() public virtual returns (bool) {}
     function cancel_auction() external virtual returns (bool) {}
     
@@ -49,8 +52,15 @@ contract Auction {
 }
 
 contract MyAuction is Auction {
+    SampleToken private tokenContract;
+    ProductIdentification private productIdentification;
     
-    constructor (uint _biddingTime, address payable _owner, string memory _brand, string memory _Rnumber) {
+    constructor (ProductIdentification _productIdentification, uint _biddingTime, address payable _owner, string memory _brand, string memory _Rnumber) {
+        require(_productIdentification.isProductRegistered(_brand), "Brand is not a registered product!");
+        
+        productIdentification = _productIdentification;
+        tokenContract = productIdentification.getSampleToken();
+
         auction_owner = _owner;
         auction_start = block.timestamp;
         auction_end = auction_start + _biddingTime*1 hours;
@@ -71,50 +81,66 @@ contract MyAuction is Auction {
         
     }
     
-    function bid() public payable an_ongoing_auction override returns (bool) {
-      
-        require(bids[msg.sender] + msg.value > highestBid,"You can't bid, Make a higher Bid");
+    function bid(uint bidTokens) public an_ongoing_auction override returns (bool) {
+        require(bidTokens > highestBid, "You can't bid, Make a higher Bid!");
+        require(bids[msg.sender] == 0, "Already bidded, you can bid only once!");
+        require(tokenContract.transferFrom(msg.sender, address(this), bidTokens));
+
         highestBidder = msg.sender;
-        highestBid = bids[msg.sender] + msg.value;
+        highestBid = bidTokens;
         bidders.push(msg.sender);
         bids[msg.sender] = highestBid;
+
         emit BidEvent(highestBidder,  highestBid);
 
         return true;
     } 
     
     function cancel_auction() external only_owner an_ongoing_auction override returns (bool) {
-    
         STATE = auction_state.CANCELLED;
         emit CanceledEvent("Auction Cancelled", block.timestamp);
         return true;
     }
     
     function withdraw() public override returns (bool) {
+        require(block.timestamp > auction_end || STATE == auction_state.CANCELLED, "You can't withdraw, the auction is still open");
         
-        require(block.timestamp > auction_end || STATE == auction_state.CANCELLED,"You can't withdraw, the auction is still open");
         uint amount;
-
         amount = bids[msg.sender];
         bids[msg.sender] = 0;
-        payable(msg.sender).transfer(amount);
+        tokenContract.transfer(msg.sender, amount);
+
         emit WithdrawalEvent(msg.sender, amount);
         return true;
-      
+    }
+
+    function withdraw_winnings() external only_owner returns (bool) {
+        require(block.timestamp > auction_end && STATE != auction_state.CANCELLED, "You can't withdraw winnings from unsuccessful auction!");
+
+        bids[highestBidder] = 0;
+        tokenContract.transfer(auction_owner, highestBid);
+
+        return true;
     }
     
     function destruct_auction() external only_owner returns (bool) {
-        
-        require(block.timestamp > auction_end || STATE == auction_state.CANCELLED,"You can't destruct the contract,The auction is still open");
-        for(uint i = 0; i < bidders.length; i++)
-        {
-            assert(bids[bidders[i]] == 0);
+        require(block.timestamp > auction_end || STATE == auction_state.CANCELLED, "You can't destruct the contract,The auction is still open");
+
+        if (STATE != auction_state.CANCELLED) {
+            bids[highestBidder] = 0;
+            tokenContract.transfer(auction_owner, highestBid);
+        }
+
+        address bidder;
+        uint amount;
+        for (uint i = 0; i < bidders.length; i++) {
+            bidder = bidders[i];
+            amount = bids[bidder];
+            bids[bidder] = 0;
+            tokenContract.transfer(bidder, amount);
         }
 
         selfdestruct(auction_owner);
         return true;
-    
-    } 
+    }
 }
-
-
