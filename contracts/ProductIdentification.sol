@@ -7,21 +7,17 @@ import "./SampleToken.sol";
 
 contract ProductIdentification is Owned {
     struct Product {
-        uint id;
         address producer;
         string name;
-        uint volume;
     }
 
     uint private registrationTax;
-    SampleToken public tokenContract;
+    SampleToken private tokenContract;
 
     // Producer => bool
     mapping(address => bool) private producers;
-    // ProductId => product
-    mapping(uint => Product) products;
-    // Product => last index for id
-    uint currentProductIndex = 0;
+    // Name => product
+    mapping(string => Product) products;
 
     constructor(SampleToken _tokenContract, uint _registrationTax) {
         tokenContract = _tokenContract;
@@ -54,26 +50,27 @@ contract ProductIdentification is Owned {
         require(producers[msg.sender] == true, "Caller isn't a registered producer.");
         require(product.producer == msg.sender, "Product producer isn't the same as caller.");
         
-        currentProductIndex = currentProductIndex + 1;
-        uint productId = currentProductIndex;
-        products[productId] = product;
-        products[productId].id = productId;
+        products[product.name] = product;
 
-        return products[productId];
+        return products[product.name];
     }
 
-    function isProductRegistered(uint productId) external view returns (bool) {
-        return products[productId].producer != address(0);
+    function isProductRegistered(string calldata name) external view returns (bool) {
+        return products[name].producer != address(0);
     }
 
-    function getProduct(uint productId) external view returns (Product memory) {
-        require(products[productId].producer != address(0), "Product does not exist");
+    function getProduct(string calldata name) external view returns (Product memory) {
+        require(products[name].producer != address(0), "Product does not exist");
 
-        return products[productId];
+        return products[name];
     }
 
     function collectTokens() external onlyOwner {
         require(tokenContract.transfer(owner, tokenContract.balanceOf(address(this))));
         payable(msg.sender).transfer(address(this).balance);
+    }
+
+    function getSampleToken() external view returns (SampleToken) {
+        return tokenContract;
     }
 }
